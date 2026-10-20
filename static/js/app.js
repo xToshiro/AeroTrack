@@ -883,30 +883,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     drawAirplaneSideView(ctx, planeScreenX, planeScreenY, 0.95, pitch);
 
-    // Airplane floating HUD Tag
-    ctx.save();
-    const tagText = `FL${Math.round(curAlt / 100)} (${curAlt.toLocaleString('pt-BR')} FT)`;
-    ctx.font = "bold 10px 'JetBrains Mono', monospace";
-    const textWidth = ctx.measureText(tagText).width;
-    const boxW = textWidth + 14;
-    const boxH = 20;
-    const boxX = Math.min(W - pRight - boxW, Math.max(pLeft, planeScreenX - boxW / 2));
-    const boxY = Math.max(pTop + 5, planeScreenY - 36);
-
-    ctx.fillStyle = "rgba(8, 14, 28, 0.85)";
-    ctx.strokeStyle = "#00e5ff";
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.roundRect(boxX, boxY, boxW, boxH, 4);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.fillStyle = "#ffffff";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(tagText, boxX + boxW / 2, boxY + boxH / 2);
-    ctx.restore();
-
     // --- MOUSE HOVER CROSSHAIR ---
     if (state.mouseHoverPos) {
       const mx = state.mouseHoverPos.x;
