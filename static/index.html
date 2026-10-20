@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AeroTrack // Radar ADS-B & Telemetria de Voos Global</title>
+  <meta name="description" content="Monitoramento global de voos comerciais e executivos com dados abertos de transponder ADS-B em tempo real.">
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  
+  <!-- Custom Styling -->
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="radar-theme">
+  <!-- Audio Context notification indicator -->
+  <div class="radar-grid-bg"></div>
+
+  <!-- Header / Top Bar -->
+  <header class="app-header">
+    <div class="header-brand">
+      <div class="radar-scope-icon">
+        <div class="radar-sweep"></div>
+        <i class="fa-solid fa-satellite-dish"></i>
+      </div>
+      <div>
+        <h1 class="brand-title">AERO-TRACK <span>ADS-B RADAR</span></h1>
+        <p class="brand-subtitle">Monitoramento de Voos em Tempo Real • Dados Públicos Abertos</p>
+      </div>
+    </div>
+
+    <!-- Center Flight Selector & Search -->
+    <div class="header-controls">
+      <div class="search-box">
+        <i class="fa-solid fa-magnifying-glass search-icon"></i>
+        <input type="text" id="flightInput" value="TAM3734" placeholder="Buscar voo (ex: TAM3734, AFR443)..." spellcheck="false" autocomplete="off">
+        <button id="btnSearch" class="btn-search" title="Rastrear Voo">
+          <span>BUSCAR</span>
+          <i class="fa-solid fa-arrow-right"></i>
+        </button>
+      </div>
+      <div class="quick-tags">
+        <button class="chip active" data-flight="TAM3734">TAM3734</button>
+        <button class="chip" data-flight="AFR443">AFR443</button>
+        <button class="chip" data-flight="GLO1500">GLO1500</button>
+        <button class="chip" data-flight="AZU4000">AZU4000</button>
+        <button class="chip" data-flight="TAP089">TAP089</button>
+      </div>
+    </div>
+
+    <!-- Status & Actions -->
+    <div class="header-status">
+      <div class="clock-display">
+        <span class="clock-utc" id="clockUtc">--:--:-- UTC</span>
+        <span class="clock-brt" id="clockBrt">--:--:-- BRT</span>
+      </div>
+
+      <div class="action-buttons">
+        <button id="btnAudioToggle" class="btn-action active" title="Alternar Alerta Sonoro de Telemetria">
+          <i class="fa-solid fa-volume-high"></i>
+        </button>
+        <button id="btnRefresh" class="btn-action" title="Atualizar Agora">
+          <i class="fa-solid fa-rotate" id="refreshIcon"></i>
+        </button>
+        <button id="btnRawData" class="btn-action" title="Inspecionar JSON Bruto">
+          <i class="fa-solid fa-code"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Layout -->
+  <main class="app-layout">
+    
+    <!-- Offline / Flight Search Alert Banner -->
+    <div id="flightAlertBanner" class="flight-alert-banner">
+      <div class="alert-content">
+        <i class="fa-solid fa-triangle-exclamation alert-icon"></i>
+        <span id="flightAlertMessage">Nenhum sinal ADS-B ao vivo detectado.</span>
+      </div>
+      <div class="alert-quick-links">
+        <span>Sugestões de voos:</span>
+        <button class="alert-link" data-flight="TAM3734">TAM3734</button>
+        <button class="alert-link" data-flight="AFR443">AFR443</button>
+        <button class="alert-link" data-flight="GLO1500">GLO1500</button>
+        <button class="alert-link" data-flight="AZU4000">AZU4000</button>
+      </div>
+    </div>
+
+    <!-- Top Flight Hero Banner -->
+    <section class="flight-hero card-glass">
+      <div class="hero-main">
+        <!-- Live Badge & Flight Code -->
+        <div class="hero-flight-id">
+          <div class="live-pill" id="livePill">
+            <span class="live-beacon"></span>
+            <span id="liveStatusText">AO VIVO (ADS-B)</span>
+          </div>
+          <div class="flight-numbers">
+            <h2 id="mainCallsign">TAM3734</h2>
+            <span class="flight-alt-number" id="altFlightNumber">LATAM LA3734</span>
+          </div>
+          <div class="aircraft-capsule" id="aircraftCapsule">
+            <i class="fa-solid fa-plane"></i>
+            <span id="aircraftModelShort">Airbus A320neo (A20N)</span>
+            <span class="reg-tag" id="aircraftRegShort">PR-XBV</span>
+          </div>
+        </div>
+
+        <!-- Route Progress Visualizer -->
+        <div class="route-tracker">
+          <!-- Origin -->
+          <div class="airport-node node-origin">
+            <div class="iata" id="originIata">BSB</div>
+            <div class="city" id="originCity">Brasília</div>
+            <div class="gate-tag" id="originGateTag">Portão 38 • T1</div>
+          </div>
+
+          <!-- Progress Bar & Airplane Icon -->
+          <div class="progress-bar-container">
+            <div class="flight-phase-label" id="flightPhaseLabel">EM CRUZEIRO</div>
+            <div class="progress-track">
+              <div class="progress-fill" id="progressFill" style="width: 15%;"></div>
+              <div class="plane-progress-marker" id="planeProgressMarker" style="left: 15%;">
+                <i class="fa-solid fa-plane-up"></i>
+              </div>
+            </div>
+            <div class="progress-stats">
+              <span id="distFlownText">Percorrido: 0 km</span>
+              <span id="progressPctText" class="pct-highlight">15%</span>
+              <span id="distRemText">Restante: 0 km</span>
+            </div>
+          </div>
+
+          <!-- Destination -->
+          <div class="airport-node node-dest">
+            <div class="iata" id="destIata">FOR</div>
+            <div class="city" id="destCity">Fortaleza</div>
+            <div class="gate-tag" id="destGateTag">Pinto Martins Int.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Cockpit Telemetry HUD Ribbon -->
+    <section class="telemetry-hud">
+      <!-- Altitude -->
+      <div class="hud-card card-glass">
+        <div class="hud-header">
+          <i class="fa-solid fa-mountain-sun hud-icon"></i>
+          <span>ALTITUDE (BARO)</span>
+        </div>
+        <div class="hud-body">
+          <div class="hud-value" id="valAltitude">-- <span class="unit">FT</span></div>
+          <div class="hud-sub" id="valAltitudeMeters">-- M (MSL)</div>
+        </div>
+        <div class="hud-footer">
+          <span id="vsiIndicator" class="vsi-badge neutral">
+            <i class="fa-solid fa-minus"></i> <span id="valVsi">0 FPM</span>
+          </span>
+        </div>
+      </div>
+
+      <!-- Ground Speed -->
+      <div class="hud-card card-glass">
+        <div class="hud-header">
+          <i class="fa-solid fa-gauge-high hud-icon"></i>
+          <span>VELOCIDADE (GS)</span>
+        </div>
+        <div class="hud-body">
+          <div class="hud-value" id="valSpeed">-- <span class="unit">KTS</span></div>
+          <div class="hud-sub" id="valSpeedKmh">-- KM/H</div>
+        </div>
+        <div class="hud-footer">
+          <span class="badge-mach" id="valMach">MACH 0.00</span>
+        </div>
+      </div>
+
+      <!-- Heading / Compass -->
+      <div class="hud-card card-glass">
+        <div class="hud-header">
+          <i class="fa-regular fa-compass hud-icon"></i>
+          <span>PROA (HEADING)</span>
+        </div>
+        <div class="hud-body">
+          <div class="hud-value" id="valHeading">--° <span class="unit" id="valHeadingCardinal">--</span></div>
+          <div class="hud-sub">DIREÇÃO DA ROTA</div>
+        </div>
+        <div class="hud-footer compass-preview">
+          <div class="compass-dial" id="compassDial">
+            <div class="compass-pointer"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Coordenadas Geográficas -->
+      <div class="hud-card card-glass">
+        <div class="hud-header">
+          <i class="fa-solid fa-location-crosshairs hud-icon"></i>
+          <span>POSIÇÃO ADS-B</span>
+        </div>
+        <div class="hud-body">
+          <div class="hud-coords" id="valCoords">--.----, --.----</div>
+          <div class="hud-sub" id="valHexCode">HEX MODE-S: ------</div>
+        </div>
+        <div class="hud-footer">
+          <span class="transponder-status">TRANSPONDER: ATIVO</span>
+        </div>
+      </div>
+
+      <!-- ETA / Previsão -->
+      <div class="hud-card card-glass">
+        <div class="hud-header">
+          <i class="fa-regular fa-clock hud-icon"></i>
+          <span>PREVISÃO (ETA)</span>
+        </div>
+        <div class="hud-body">
+          <div class="hud-value" id="valEta">--:-- <span class="unit">BRT</span></div>
+          <div class="hud-sub" id="valFlightStatusDesc">Estimado conforme plano</div>
+        </div>
+        <div class="hud-footer">
+          <span class="badge-eta-status" id="badgeEtaStatus">NO HORÁRIO</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Main Radar & Tactical Details Split -->
+    <section class="tactical-workspace">
+      
+      <!-- Left Column: Map & 2D Elevation Profile -->
+      <div class="tactical-main-column">
+        
+        <!-- Interactive Radar Map -->
+        <div class="radar-map-container card-glass">
+          <div class="map-toolbar">
+            <div class="map-title">
+              <i class="fa-solid fa-radar fa-spin-pulse"></i>
+              <span>RADAR TÁTICO DE MONITORAMENTO (VISTA SUPERIOR)</span>
+            </div>
+
+            <div class="map-controls">
+              <button id="btnRecenter" class="map-btn" title="Centralizar na Aeronave">
+                <i class="fa-solid fa-crosshairs"></i> Centralizar
+              </button>
+              <button id="btnToggleTrail" class="map-btn active" title="Exibir Rastro de Voo">
+                <i class="fa-solid fa-route"></i> Rastro
+              </button>
+              <button id="btnMapStyle" class="map-btn" title="Alternar Estilo do Mapa">
+                <i class="fa-solid fa-layer-group"></i> Estilo
+              </button>
+            </div>
+          </div>
+
+          <!-- The Leaflet Map Canvas -->
+          <div id="radarMap" class="radar-map"></div>
+
+          <!-- Radar Overlay Legend -->
+          <div class="map-overlay-legend">
+            <div class="legend-item"><span class="legend-color orig"></span> Origem <span id="legendOrigIata">(DEP)</span></div>
+            <div class="legend-item"><span class="legend-color plane"></span> Posição Atual</div>
+            <div class="legend-item"><span class="legend-color dest"></span> Destino <span id="legendDestIata">(ARR)</span></div>
+            <div class="legend-item"><span class="legend-color trail"></span> Rastro ADS-B</div>
+          </div>
+        </div>
+
+        <!-- 2D Vertical Flight Profile (Side-view / VSD) -->
+        <div class="elevation-profile-container card-glass" id="profileContainer">
+          <div class="profile-toolbar">
+            <div class="profile-title">
+              <i class="fa-solid fa-chart-area"></i>
+              <span>PERFIL VERTICAL DE ELEVAÇÃO // VISÃO LATERAL (VSD)</span>
+            </div>
+            <div class="profile-metrics">
+              <span class="vsd-badge" id="vsdFlightLevel">FL320</span>
+              <span class="vsd-badge cyan" id="vsdAltText">32.050 FT</span>
+              <span class="vsd-badge green" id="vsdVsiText">+720 FPM</span>
+            </div>
+            <div class="profile-controls">
+              <button id="btnToggleProfileGrid" class="map-btn active" title="Alternar Grade de Altitude">
+                <i class="fa-solid fa-border-all"></i> Grade FL
+              </button>
+            </div>
+          </div>
+          
+          <div class="profile-canvas-wrapper" id="profileCanvasWrapper">
+            <canvas id="elevationCanvas" class="elevation-canvas"></canvas>
+            <div id="vsdTooltip" class="vsd-tooltip"></div>
+          </div>
+
+          <div class="profile-legend">
+            <div class="p-legend-item"><span class="p-dot flown"></span> Trajetória Real ADS-B</div>
+            <div class="p-legend-item"><span class="p-dot plane"></span> Aeronave (Vista Lateral)</div>
+            <div class="p-legend-item"><span class="p-dot projected"></span> Rota Projetada / Descida</div>
+            <div class="p-legend-item"><span class="p-dot terrain"></span> Relevo do Terreno (MSL)</div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Right Column: Tactical Information & Feed -->
+      <div class="tactical-sidebar">
+        
+        <!-- Aircraft Card with Real Photo -->
+        <div class="aircraft-card card-glass">
+          <div class="card-header">
+            <h3><i class="fa-solid fa-plane-circle-check"></i> AERONAVE EM OPERAÇÃO</h3>
+            <span class="reg-pill" id="cardRegBadge">PR-XBV</span>
+          </div>
+
+          <div class="aircraft-photo-wrapper">
+            <img id="aircraftPhoto" src="" alt="Foto da Aeronave" class="aircraft-photo" />
+            <div class="photo-overlay">
+              <span id="photoCopyright" class="photo-credit"><i class="fa-solid fa-camera"></i> JetPhotos</span>
+            </div>
+          </div>
+
+          <div class="aircraft-specs-grid">
+            <div class="spec-row">
+              <span class="spec-label">Modelo:</span>
+              <span class="spec-val" id="specModel">Airbus A320-271N</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-label">Operadora:</span>
+              <span class="spec-val" id="specAirline">LATAM Airlines Brasil</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-label">Prefixo:</span>
+              <span class="spec-val" id="specReg">PR-XBV</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-label">ICAO Hex 24-bit:</span>
+              <span class="spec-val font-mono" id="specHex">E4A125</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-label">Pontos de Rastro:</span>
+              <span class="spec-val font-mono" id="specTrailCount">0 pontos captados</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Live ADS-B Telemetry Event Feed -->
+        <div class="telemetry-log card-glass">
+          <div class="card-header">
+            <h3><i class="fa-solid fa-terminal"></i> TELEMETRIA ADS-B (PACOTES)</h3>
+            <span class="live-indicator-dot"></span>
+          </div>
+          <div class="log-stream" id="logStream">
+            <div class="log-entry system">
+              <span class="log-time">SYS</span>
+              <span class="log-msg">Iniciando conexão com a rede pública ADS-B...</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Flight Schedules Card -->
+        <div class="schedule-card card-glass">
+          <div class="card-header">
+            <h3><i class="fa-solid fa-calendar-days"></i> CRONOGRAMA DO VOO</h3>
+          </div>
+          <div class="schedule-timeline">
+            <div class="schedule-point">
+              <div class="sched-dot orig"></div>
+              <div class="sched-details">
+                <div class="sched-title">Partida: <span id="schedOrigTitle">Origem</span></div>
+                <div class="sched-times">
+                  <span>Previsto: <strong id="schedDepTime">--:--</strong></span>
+                  <span>Efetivo: <strong id="realDepTime" class="time-green">--:--</strong></span>
+                </div>
+              </div>
+            </div>
+            <div class="schedule-point">
+              <div class="sched-dot dest"></div>
+              <div class="sched-details">
+                <div class="sched-title">Chegada: <span id="schedDestTitle">Destino</span></div>
+                <div class="sched-times">
+                  <span>Previsto: <strong id="schedArrTime">--:--</strong></span>
+                  <span>Estimado: <strong id="estArrTime" class="time-cyan">--:--</strong></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Raw Data Modal -->
+  <div id="rawModal" class="modal-overlay">
+    <div class="modal-content card-glass">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-code"></i> DADOS PÚBLICOS BRUTOS (JSON)</h3>
+        <button id="btnCloseModal" class="btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <pre><code id="jsonViewer">Carregando dados...</code></pre>
+      </div>
+      <div class="modal-footer">
+        <button id="btnCopyJson" class="btn-action"><i class="fa-solid fa-copy"></i> Copiar JSON</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="app-footer">
+    <div class="footer-content">
+      <span id="footerFlightDesc">AeroTrack ADS-B // Monitoramento Tático Universal de Voos Comerciais e Executivos</span>
+      <span>Fonte: Rede Pública Global de Receptores ADS-B & Telemetria Aberta</span>
+      <span class="auto-refresh-tag"><i class="fa-solid fa-arrows-rotate"></i> Polling: <span id="pollingIntervalText">5s</span></span>
+    </div>
+  </footer>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  
+  <!-- Main Application Script -->
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
