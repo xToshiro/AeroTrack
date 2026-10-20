@@ -6,6 +6,7 @@ Queries real-time public ADS-B transponder data and flight schedules.
 import time
 import math
 import logging
+from pathlib import Path
 from typing import Optional, Dict, Any, List
 import requests
 from fastapi import FastAPI, HTTPException, Query
@@ -564,12 +565,16 @@ def health_check():
         "active_cached_flights": len(_flight_cache)
     }
 
+# Resolve paths relative to this file so it works from any working directory
+BASE_DIR = Path(__file__).resolve().parent
+STATIC_DIR = BASE_DIR / "static"
+
 # Mount static folder
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 @app.get("/")
 def serve_index():
-    return FileResponse("static/index.html")
+    return FileResponse(str(STATIC_DIR / "index.html"))
 
 if __name__ == "__main__":
     uvicorn.run("server:app", host="0.0.0.0", port=8080, reload=False)
